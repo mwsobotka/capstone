@@ -164,53 +164,55 @@ def run_simulation(
         )
         iter_stats_irv.append(stats_irv)
 
-        #  summary fptp
-        cw_fptp = stats_fptp["condorcet"]
-        excel_rows.append({
-            "iteration": t + 1,
-            "system": "fptp",
-            "parties": P_after_fptp,
-            "merges": merges_fptp,
-            "winner": stats_fptp["fptp"]["winner"],
-            "mean_distance": stats_fptp["fptp"]["mean_dist"],
-            "condorcet": cw_fptp,
-            "condorcet_match": int(cw_fptp != -1 and stats_fptp["fptp"]["winner"] == cw_fptp),
-        })
+        for system, stats, p_after, merges in [
+            ("fptp", stats_fptp, P_after_fptp, merges_fptp),
+            ("approval", stats_approval, P_after_approval, merges_approval),
+            ("irv", stats_irv, P_after_irv, merges_irv),
+        ]:
+            cw = stats["condorcet"]
+            excel_rows.append({
+                "iteration": t + 1,
+                "system": system,
+                "parties": p_after,
+                "merges": merges,
+                "winner": stats[system]["winner"],
+                "mean_distance": stats[system]["mean_dist"],
+                "condorcet": cw,
+                "condorcet_match": int(cw != -1 and stats[system]["winner"] == cw),
+            })
 
-        # summary approval
-        cw_approval = stats_approval["condorcet"]
-        excel_rows.append({
-            "iteration": t + 1,
-            "system": "approval",
-            "parties": P_after_approval,
-            "merges": merges_approval,
-            "winner": stats_approval["approval"]["winner"],
-            "mean_distance": stats_approval["approval"]["mean_dist"],
-            "condorcet": cw_approval,
-            "condorcet_match": int(cw_approval != -1 and stats_approval["approval"]["winner"] == cw_approval),
-        })
+    # Results
+    return {
+        "metadata": {
+            "voter_model": voter_model,
+            "N": N,
+            "P_init": P_init,
+            "T": T,
+            "eta": eta,
+            "d_merge": d_merge,
+            "seed": seed,
+        },
+        "voters": voters,
+        "rules": {
+            "fptp": {
+                "party_history": party_history_fptp,
+                "party_counts": party_counts_fptp,
+                "iter_stats": iter_stats_fptp,
+            },
+            "approval": {
+                "party_history": party_history_approval,
+                "party_counts": party_counts_approval,
+                "iter_stats": iter_stats_approval,
+            },
+            "irv": {
+                "party_history": party_history_irv,
+                "party_counts": party_counts_irv,
+                "iter_stats": iter_stats_irv,
+            },
+        },
+        "summary_rows": excel_rows,
+    }    
 
-        # summary irv
-        cw_irv = stats_irv["condorcet"]
-        excel_rows.append({
-            "iteration": t + 1,
-            "system": "irv",
-            "parties": P_after_irv,
-            "merges": merges_irv,
-            "winner": stats_irv["irv"]["winner"],
-            "mean_distance": stats_irv["irv"]["mean_dist"],
-            "condorcet": cw_irv,
-            "condorcet_match": int(cw_irv != -1 and stats_irv["irv"]["winner"] == cw_irv),
-        })
-
-    # return summaries
-    return (
-        voters,
-        party_history_fptp, party_counts_fptp, iter_stats_fptp,
-        party_history_approval, party_counts_approval, iter_stats_approval,
-        party_history_irv, party_counts_irv, iter_stats_irv,
-        excel_rows,
-    )
 
 def summarize_results(iter_stats: list[dict]):
 
