@@ -26,6 +26,8 @@ from plots import (
     plot_winner_regions,
 )
 import pandas as pd
+import pickle
+import os
 
 
 def run_simulation(
@@ -34,7 +36,12 @@ def run_simulation(
     P_init: int = 4,
     T: int = 15,
     eta: float = 0.3,
-    d_merge: float = 0.5,):
+    d_merge: float = 0.5,
+    seed: int | None = None, ):
+    
+    if seed is not None:
+        np.random.seed(seed)
+
     excel_rows = []
 
 
@@ -125,41 +132,54 @@ def run_simulation(
         party_counts_irv.append(P_after_irv)
 
         # record metrics fptp
+        # AFTER merging
+        U_fptp_after = compute_utilities(voters, parties_fptp, gamma=0.5)
+        turnout_fptp_after = compute_turnout_probabilistic(voters, parties_fptp, alpha=1.0)
+        choices_fptp_after = ballots_fptp(U_fptp_after)
+
         stats_fptp = iteration_summary(
             voters=voters,
             parties_before=parties_before_fptp,
             parties_after=parties_fptp,
-            U=U_fptp,
-            turnout=turnout_fptp,
-            choices=choices_fptp,
+            U=U_fptp_after,
+            turnout=turnout_fptp_after,
+            choices=choices_fptp_after,
             merges_this_round=merges_fptp,
         )
         iter_stats_fptp.append(stats_fptp)
 
         # record metrics approval
-        choices_approval_for_metrics = ballots_fptp(U_approval)
+        U_approval_after = compute_utilities(voters, parties_approval, gamma=0.5)
+        turnout_approval_after = compute_turnout_probabilistic(voters, parties_approval, alpha=1.0)
+
+        choices_approval_after = ballots_fptp(U_approval_after)
 
         stats_approval = iteration_summary(
             voters=voters,
             parties_before=parties_before_approval,
             parties_after=parties_approval,
-            U=U_approval,
-            turnout=turnout_approval,
-            choices=choices_approval_for_metrics,
+            U=U_approval_after,
+            turnout=turnout_approval_after,
+            choices=choices_approval_after,
             merges_this_round=merges_approval,
         )
-        iter_stats_approval.append(stats_approval)
 
         # record metrics irv
         choices_irv_for_metrics = rankings[:, 0]
+
+        U_irv_after = compute_utilities(voters, parties_irv, gamma=0.5)
+        turnout_irv_after = compute_turnout_probabilistic(voters, parties_irv, alpha=1.0)
+        rankings_after = ballots_ranked(U_irv_after)
+
+        choices_irv_after = rankings_after[:, 0]
 
         stats_irv = iteration_summary(
             voters=voters,
             parties_before=parties_before_irv,
             parties_after=parties_irv,
-            U=U_irv,
-            turnout=turnout_irv,
-            choices=choices_irv_for_metrics,
+            U=U_irv_after,
+            turnout=turnout_irv_after,
+            choices=choices_irv_after,
             merges_this_round=merges_irv,
         )
         iter_stats_irv.append(stats_irv)
@@ -307,42 +327,31 @@ def run_plots(voters, party_history, party_counts, iter_stats):
 
 
 def main():
-    # --- PARAMETERS ---
-    voter_model = "mixture" 
-    N = 2000
-    P_init = 4
-    T = 15
-    eta = 0.3
-    d_merge = 0.5
+    n_runs = 10
+    T = 100
+    output_dir = "saved_runs"
 
-    # 1. Run
-    (
-        voters,
-        party_history_fptp, party_counts_fptp, iter_stats_fptp,
-        party_history_approval, party_counts_approval, iter_stats_approval,
-        party_history_irv, party_counts_irv, iter_stats_irv,
-        excel_rows,
-    ) = run_simulation(
-        voter_model=voter_model,
-        N=N,
-        P_init=P_init,
-        T=T,
-        eta=eta,
-        d_merge=d_merge,
-    )        
+    os.makedirs(output_dir, exist_ok=True)
 
-    # 2. Summary
-    print("\n--- FPTP ---")
-    summarize_results(iter_stats_fptp)
 
-    print("\n--- APPROVAL ---")
-    summarize_results(iter_stats_approval)
+    for i in range(n_runs):
+        print(f"Running simulation {i+1}/{n_runs}")
 
-    print("\n--- IRV ---")
-    summarize_results(iter_stats_irv)
+        results = run_simulation(
+            voter_model="mixture",
+            N=2000,
+            P_init=4,
+            T=T,
+            eta=0.3,
+            d_merge=0.5,
+            seed=i,   
+        )
 
-    # 3. Plots
-    run_plots(voters, party_history_fptp, party_counts_fptp, iter_stats_fptp)
+        with open(f"{output_dir}/run_{i:04d}.pkl", "wb") as f:
+            pickle.dump(results, f)
+
+    print(f"\nSaved {n_runs} runs to {output_dir}/")
+
 
 if __name__ == "__main__":
     main()
