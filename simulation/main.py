@@ -25,7 +25,6 @@ from plots import (
     plot_utility_heatmap,
     plot_winner_regions,
 )
-import pandas as pd
 import pickle
 import os
 
@@ -163,6 +162,7 @@ def run_simulation(
             choices=choices_approval_after,
             merges_this_round=merges_approval,
         )
+        iter_stats_approval.append(stats_approval)
 
         # record metrics irv
         choices_irv_for_metrics = rankings[:, 0]
@@ -327,9 +327,9 @@ def run_plots(voters, party_history, party_counts, iter_stats):
 
 
 def main():
-    n_runs = 10
+    n_runs = 1000
     T = 100
-    output_dir = "saved_runs"
+    output_dir = "saved_runs_final"
 
     os.makedirs(output_dir, exist_ok=True)
 
@@ -339,7 +339,7 @@ def main():
 
         results = run_simulation(
             voter_model="mixture",
-            N=2000,
+            N=1000,
             P_init=4,
             T=T,
             eta=0.3,

@@ -1,124 +1,110 @@
+import os
+import pickle
 import numpy as np
-from parties import update_parties, merge_close_parties
 
-def test_update_parties():
-    # 5 voters near (0,0) who choose party 0
-    # 5 voters near (4,0) who choose party 1
-    voters = np.array([
-        [-0.1,  0.0],
-        [ 0.2, -0.1],
-        [-0.2,  0.1],
-        [ 0.1,  0.2],
-        [ 0.0, -0.2],
-        [ 3.9,  0.1],
-        [ 4.1, -0.2],
-        [ 4.2,  0.0],
-        [ 3.8,  0.2],
-        [ 4.0, -0.1],
-    ])
+folder = "saved_runs_final"
 
-    # 2 parties, far from their voters on purpose
-    parties = np.array([
-        [-2.0, 0.0],   # party 0 starts left of its supporters
-        [ 6.0, 0.0],   # party 1 starts right of its supporters
-    ])
+# 1. Check folder exists
+if not os.path.exists(folder):
+    raise FileNotFoundError(f"Folder '{folder}' does not exist. Run main.py first.")
 
-    # first 5 voters choose party 0, next 5 voters choose party 1
-    choices = np.array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1])
+# 2. Find all pickle files
+files = sorted([f for f in os.listdir(folder) if f.endswith(".pkl")])
 
-    eta = 0.25  # move 25% of the way toward supporters
+print("FILES FOUND:")
+for f in files:
+    print(" ", f)
 
-    print("=== test_update_parties ===")
-    print("Original parties:\n", parties)
+print("\nTOTAL FILES:", len(files))
 
-    new_parties = update_parties(voters, parties, choices, eta=eta)
+if len(files) == 0:
+    raise ValueError("No .pkl files found. Simulation may not have saved anything.")
 
-    print("Updated parties:\n", new_parties)
+# 3. Check each run file
+for file in files:
+    path = os.path.join(folder, file)
 
-    # manually compute supporter means to check
-    mean_0 = voters[choices == 0].mean(axis=0)
-    mean_1 = voters[choices == 1].mean(axis=0)
-    print("Mean supporters for party 0:", mean_0)
-    print("Mean supporters for party 1:", mean_1)
+    print("\n" + "=" * 60)
+    print("CHECKING:", file)
 
-    # check one example numerically:
-    expected_0 = parties[0] + eta * (mean_0 - parties[0])
-    print("Expected updated party 0:", expected_0)
-    print("Actual   updated party 0:", new_parties[0])
+    with open(path, "rb") as f:
+        data = pickle.load(f)
 
-import numpy as np
-from parties import update_parties, merge_close_parties
+    # --- top-level structure ---
+    print("Top-level keys:", data.keys())
 
-def test_update_parties():
-    # 5 voters near (0,0) who choose party 0
-    # 5 voters near (4,0) who choose party 1
-    voters = np.array([
-        [-0.1,  0.0],
-        [ 0.2, -0.1],
-        [-0.2,  0.1],
-        [ 0.1,  0.2],
-        [ 0.0, -0.2],
-        [ 3.9,  0.1],
-        [ 4.1, -0.2],
-        [ 4.2,  0.0],
-        [ 3.8,  0.2],
-        [ 4.0, -0.1],
-    ])
+    assert "metadata" in data, "Missing 'metadata'"
+    assert "voters" in data, "Missing 'voters'"
+    assert "rules" in data, "Missing 'rules'"
+    assert "summary_rows" in data, "Missing 'summary_rows'"
 
-    # 2 parties, far from their voters on purpose
-    parties = np.array([
-        [-2.0, 0.0],   # party 0 starts left of its supporters
-        [ 6.0, 0.0],   # party 1 starts right of its supporters
-    ])
+    metadata = data["metadata"]
+    rules = data["rules"]
 
-    # first 5 voters choose party 0, next 5 voters choose party 1
-    choices = np.array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1])
+    print("Metadata:", metadata)
+    print("Rules present:", rules.keys())
 
-    eta = 0.25  # move 25% of the way toward supporters
+    T = metadata["T"]
 
-    print("=== test_update_parties ===")
-    print("Original parties:\n", parties)
+    # --- rule-level checks ---
+    for rule_name in ["fptp", "approval", "irv"]:
+        assert rule_name in rules, f"Missing rule '{rule_name}'"
 
-    new_parties = update_parties(voters, parties, choices, eta=eta)
+        rule_data = rules[rule_name]
 
-    print("Updated parties:\n", new_parties)
+        assert "party_history" in rule_data, f"{rule_name} missing party_history"
+        assert "party_counts" in rule_data, f"{rule_name} missing party_counts"
+        assert "iter_stats" in rule_data, f"{rule_name} missing iter_stats"
 
-    # manually compute supporter means to check
-    mean_0 = voters[choices == 0].mean(axis=0)
-    mean_1 = voters[choices == 1].mean(axis=0)
-    print("Mean supporters for party 0:", mean_0)
-    print("Mean supporters for party 1:", mean_1)
+        party_history = rule_data["party_history"]
+        party_counts = rule_data["party_counts"]
+        iter_stats = rule_data["iter_stats"]
 
-    # check one example numerically:
-    expected_0 = parties[0] + eta * (mean_0 - parties[0])
-    print("Expected updated party 0:", expected_0)
-    print("Actual   updated party 0:", new_parties[0])
+        print(f"\nRULE: {rule_name}")
+        print("  party_history length:", len(party_history))
+        print("  party_counts length:", len(party_counts))
+        print("  iter_stats length:", len(iter_stats))
 
-def test_merge_close_parties():
-    # three parties:
-    #  - party 0 at (0,0)
-    #  - party 1 very close to party 0
-    #  - party 2 far away
-    parties = np.array([
-        [0.0, 0.0],   # p0
-        [0.2, 0.1],   # p1 (close to p0)
-        [3.0, 3.0],   # p2 (far)
-    ])
+        # Expected lengths:
+        # history and counts include initial state, so T + 1
+        # iter_stats are recorded once per iteration, so T
+        assert len(party_history) == T + 1, f"{rule_name}: party_history should be T+1"
+        assert len(party_counts) == T + 1, f"{rule_name}: party_counts should be T+1"
+        assert len(iter_stats) == T, f"{rule_name}: iter_stats should be T"
 
-    print("\n=== test_merge_close_parties ===")
-    print("Original parties:\n", parties)
+        # Check shapes
+        first_positions = party_history[0]
+        last_positions = party_history[-1]
 
-    # set merge distance threshold
-    d_merge = 0.5
+        print("  initial shape:", first_positions.shape)
+        print("  final shape:", last_positions.shape)
 
-    new_parties = merge_close_parties(parties, d_merge=d_merge)
+        assert first_positions.ndim == 2, f"{rule_name}: initial positions should be 2D"
+        assert last_positions.ndim == 2, f"{rule_name}: final positions should be 2D"
+        assert first_positions.shape[1] == 2, f"{rule_name}: initial positions should have 2 columns"
+        assert last_positions.shape[1] == 2, f"{rule_name}: final positions should have 2 columns"
 
-    print("Merged parties (d_merge=0.5):\n", new_parties)
-    print("Number of parties before:", parties.shape[0])
-    print("Number of parties after: ", new_parties.shape[0])
+        # Check no NaNs
+        assert not np.isnan(first_positions).any(), f"{rule_name}: initial positions contain NaN"
+        assert not np.isnan(last_positions).any(), f"{rule_name}: final positions contain NaN"
 
-if __name__ == "__main__":
-    test_update_parties()
-    test_merge_close_parties()
+        # Check counts are sensible
+        assert all(p >= 1 for p in party_counts), f"{rule_name}: party count dropped below 1"
 
+        # Check whether simulation changed something
+        if first_positions.shape == last_positions.shape:
+            changed = not np.allclose(first_positions, last_positions)
+            print("  positions changed:", changed)
+        else:
+            print("  party count changed, so structure changed")
 
+    # --- summary_rows check ---
+    expected_summary_rows = 3 * T
+    actual_summary_rows = len(data["summary_rows"])
+    print("\nsummary_rows length:", actual_summary_rows)
+    assert actual_summary_rows == expected_summary_rows, (
+        f"summary_rows should be {expected_summary_rows}, got {actual_summary_rows}"
+    )
+
+print("\n" + "=" * 60)
+print("ALL CHECKS PASSED")
